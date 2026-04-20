@@ -41,13 +41,18 @@ export default function AttendPage() {
     setSaving(false)
   }
 
-  const handleICSImport = (busy: string[]) => {
+  const handleICSImport = async (busy: string[]) => {
     if (!data) return
     const dates = getDates(data.event.start_date, data.event.days_to_show)
     const updated = { ...avail }
     dates.forEach(d => { if (busy.includes(d)) updated[d] = 'busy'; else if (!updated[d]) updated[d] = 'free' })
     setAvail(updated)
-    showToast(`${busy.length} busy dates imported`, '📥', 'var(--a)')
+    await fetch(`/api/attendees/${data.attendee.id}/availability`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ availability: updated }),
+    })
+    setSaved(true)
+    showToast(`Imported & saved ${busy.length} busy dates`, '📥', 'var(--g)')
   }
 
   if (loading) return (

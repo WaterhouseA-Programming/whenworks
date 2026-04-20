@@ -150,12 +150,19 @@ export default function EventPage() {
     setSaving(false)
   }
 
-  const handleICSImport = (busy: string[]) => {
+  const handleICSImport = async (busy: string[]) => {
+    if (!activeAttId) return
     const dates = getDates(ev.start_date, ev.days_to_show)
-    const updated = { ...localAvail }
+    const base = ev.attendees.find(a => a.id === activeAttId)?.availability || {}
+    const updated: Record<string, AvailStatus> = { ...base }
     dates.forEach(d => { if (busy.includes(d)) updated[d] = 'busy'; else if (!updated[d]) updated[d] = 'free' })
     setLocalAvail(updated)
-    showToast(`${busy.length} busy dates imported`, '📥', 'var(--a)')
+    await fetch(`/api/attendees/${activeAttId}/availability`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ availability: updated }),
+    })
+    await load()
+    showToast(`Imported & saved ${busy.length} busy dates`, '📥', 'var(--g)')
   }
 
   const handleFinalise = async () => {

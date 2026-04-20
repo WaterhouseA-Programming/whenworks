@@ -107,6 +107,7 @@ export function parseICS(text: string): string[] {
     if (s) {
       let cur = `${s[1].slice(0,4)}-${s[1].slice(4,6)}-${s[1].slice(6,8)}`
       const end = e ? `${e[1].slice(0,4)}-${e[1].slice(4,6)}-${e[1].slice(6,8)}` : cur
+      busy.add(cur) // always add the start date (handles same-day timed events where cur === end)
       while (cur < end) { busy.add(cur); cur = addDaysStr(cur, 1) }
     }
   }
