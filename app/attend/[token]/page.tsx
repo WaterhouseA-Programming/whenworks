@@ -1,9 +1,9 @@
 'use client'
 import React, { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { Btn, Card, Label, Field, Textarea, Modal, ModalActions, Toast, Avatar, CalendarSourceButtons } from '@/components/ui'
+import { Btn, Card, Label, Toast, Avatar, ICSImportModal } from '@/components/ui'
 import { AvailPicker } from '@/components/AvailGrid'
-import { fmtDate, fmtLong, parseICS, getDates } from '@/lib/utils'
+import { fmtDate, fmtLong, getDates } from '@/lib/utils'
 import type { EventFull, AttendeeWithAvail, AvailStatus } from '@/types'
 
 const TIME_SLOT_LABELS: Record<string, string> = { morning: '🌅 Morning', afternoon: '☀️ Afternoon', evening: '🌙 Evening', allday: '📅 All Day' }
@@ -17,7 +17,6 @@ export default function AttendPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [showICS, setShowICS] = useState(false)
-  const [icsText, setIcsText] = useState('')
   const [toast, setToast] = useState<{ msg: string; icon: string; colour?: string } | null>(null)
 
   const showToast = useCallback((msg: string, icon: string, colour?: string) => {
@@ -42,14 +41,12 @@ export default function AttendPage() {
     setSaving(false)
   }
 
-  const handleICS = () => {
-    if (!icsText.trim() || !data) return
-    const busy = parseICS(icsText)
+  const handleICSImport = (busy: string[]) => {
+    if (!data) return
     const dates = getDates(data.event.start_date, data.event.days_to_show)
     const updated = { ...avail }
     dates.forEach(d => { if (busy.includes(d)) updated[d] = 'busy'; else if (!updated[d]) updated[d] = 'free' })
     setAvail(updated)
-    setIcsText(''); setShowICS(false)
     showToast(`${busy.length} busy dates imported`, '📥', 'var(--a)')
   }
 
@@ -183,16 +180,7 @@ export default function AttendPage() {
       </Card>
 
       {/* ICS Import Modal */}
-      <Modal open={showICS} onClose={() => setShowICS(false)} title="📥 Import Calendar" subtitle="Open your calendar app, export as .ics, then paste the file contents below.">
-        <CalendarSourceButtons />
-        <Field label="Paste .ics file contents">
-          <Textarea rows={5} placeholder={'BEGIN:VCALENDAR\nVERSION:2.0\n...'} value={icsText} onChange={e => setIcsText(e.target.value)} />
-        </Field>
-        <ModalActions>
-          <Btn variant="ghost" onClick={() => setShowICS(false)}>Cancel</Btn>
-          <Btn variant="primary" disabled={!icsText.trim()} onClick={handleICS}>Import Busy Dates</Btn>
-        </ModalActions>
-      </Modal>
+      <ICSImportModal open={showICS} onClose={() => setShowICS(false)} onImport={handleICSImport} />
 
       {toast && <Toast {...toast} />}
     </div>

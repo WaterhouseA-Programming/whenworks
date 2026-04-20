@@ -3,10 +3,10 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import {
   Btn, Card, Chip, Label, Modal, ModalActions, Field, Input, Textarea, Select,
-  Toast, Avatar, Tabs, Badge, ProgressDots, NotifItem, getColour, CalendarSourceButtons,
+  Toast, Avatar, Tabs, Badge, ProgressDots, NotifItem, getColour, ICSImportModal,
 } from '@/components/ui'
 import { OverviewGrid, AvailPicker } from '@/components/AvailGrid'
-import { bestDates, fmtDate, fmtLong, daysSince, makeICS, parseICS, getDates } from '@/lib/utils'
+import { bestDates, fmtDate, fmtLong, daysSince, makeICS, getDates } from '@/lib/utils'
 import type { EventFull, AvailStatus } from '@/types'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || ''
@@ -39,7 +39,6 @@ export default function EventPage() {
   const [addEmail, setAddEmail] = useState('')
   const [finalDate, setFinalDate] = useState('')
   const [finalNote, setFinalNote] = useState('')
-  const [icsText, setIcsText] = useState('')
   const [saving, setSaving] = useState(false)
   const [localAvail, setLocalAvail] = useState<Record<string, AvailStatus>>({})
 
@@ -151,14 +150,11 @@ export default function EventPage() {
     setSaving(false)
   }
 
-  const handleICS = () => {
-    if (!icsText.trim() || !activeAttId) return
-    const busy = parseICS(icsText)
+  const handleICSImport = (busy: string[]) => {
     const dates = getDates(ev.start_date, ev.days_to_show)
     const updated = { ...localAvail }
     dates.forEach(d => { if (busy.includes(d)) updated[d] = 'busy'; else if (!updated[d]) updated[d] = 'free' })
     setLocalAvail(updated)
-    setIcsText(''); setShowICS(false)
     showToast(`${busy.length} busy dates imported`, '📥', 'var(--a)')
   }
 
@@ -548,16 +544,7 @@ export default function EventPage() {
       </Modal>
 
       {/* ── ICS Import Modal ── */}
-      <Modal open={showICS} onClose={() => setShowICS(false)} title="📥 Import Calendar" subtitle="Open your calendar app, export as .ics, then paste the file contents below.">
-        <CalendarSourceButtons />
-        <Field label="Paste .ics file contents">
-          <Textarea rows={5} placeholder={'BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\n...'} value={icsText} onChange={e => setIcsText(e.target.value)} />
-        </Field>
-        <ModalActions>
-          <Btn variant="ghost" onClick={() => setShowICS(false)}>Cancel</Btn>
-          <Btn variant="primary" disabled={!icsText.trim()} onClick={handleICS}>Import Busy Dates</Btn>
-        </ModalActions>
-      </Modal>
+      <ICSImportModal open={showICS} onClose={() => setShowICS(false)} onImport={handleICSImport} />
 
       {/* ── Share Modal ── */}
       <Modal open={showShare} onClose={() => setShowShare(false)} title="🔗 Share Invite Link" subtitle="Anyone with this link can enter their details and add their availability — no email invite needed.">

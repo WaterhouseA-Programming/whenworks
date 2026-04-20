@@ -1,5 +1,6 @@
 'use client'
-import React from 'react'
+import React, { useState } from 'react'
+import { parseICS } from '@/lib/utils'
 
 // ── Button ────────────────────────────────────────────────────────────────────
 type BtnVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'green'
@@ -213,34 +214,121 @@ export function ProgressDots({ attendees }: { attendees: Array<{ name: string; a
   )
 }
 
-// ── Calendar source buttons ───────────────────────────────────────────────────
-const CAL_SOURCES = [
-  { icon: '📱', name: 'iPhone / iPad', hint: 'Open Calendar app → Calendars → ⓘ next to calendar → Scroll to Export', href: 'calshow://' },
-  { icon: '🍎', name: 'Mac Calendar', hint: 'File → Export → Export…', href: null },
+// ── ICS Import Modal ──────────────────────────────────────────────────────────
+const OTHER_CAL_SOURCES = [
   { icon: '🗓️', name: 'Google Calendar', hint: 'Settings (⚙) → Import & Export → Export', href: 'https://calendar.google.com/calendar/r/settings/export' },
-  { icon: '📧', name: 'Outlook.com', hint: 'Settings (⚙) → View all Outlook settings → Export calendar', href: 'https://outlook.live.com/calendar/0/options/calendar/ConnectedCalendars' },
+  { icon: '📧', name: 'Outlook.com', hint: 'Settings (⚙) → View all → Export calendar', href: 'https://outlook.live.com/calendar/0/options/calendar/ConnectedCalendars' },
   { icon: '💼', name: 'Outlook Desktop', hint: 'File → Open & Export → Import/Export → Export to a file', href: null },
+  { icon: '🍎', name: 'Mac Calendar', hint: 'File menu → Export → Export…', href: null },
 ]
 
-export function CalendarSourceButtons() {
+export function ICSImportModal({ open, onClose, onImport }: {
+  open: boolean
+  onClose: () => void
+  onImport: (busyDates: string[]) => void
+}) {
+  const [mode, setMode] = useState<'iphone' | 'other'>('iphone')
+  const [webcalUrl, setWebcalUrl] = useState('')
+  const [icsText, setIcsText] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleWebcal = async () => {
+    if (!webcalUrl.trim()) return
+    setLoading(true); setError('')
+    try {
+      const r = await fetch('/api/fetch-cal', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: webcalUrl.trim() }),
+      })
+      const json = await r.json()
+      if (!r.ok) { setError(json.error || 'Could not fetch calendar.'); return }
+      onImport(parseICS(json.ics))
+      setWebcalUrl(''); onClose()
+    } catch {
+      setError('Something went wrong — try the Other tab instead.')
+    } finally { setLoading(false) }
+  }
+
+  const handlePaste = () => {
+    if (!icsText.trim()) return
+    onImport(parseICS(icsText))
+    setIcsText(''); onClose()
+  }
+
   return (
-    <div className="grid grid-cols-1 gap-1.5 mb-4">
-      {CAL_SOURCES.map(s => {
-        const inner = (
-          <div className={`flex items-center gap-3 px-3 py-2.5 bg-surface2 border border-border rounded-[7px] transition-colors ${s.href ? 'hover:border-border2 hover:bg-surface3' : 'opacity-70'}`}>
-            <span className="text-[17px] flex-shrink-0">{s.icon}</span>
-            <div className="flex-1 min-w-0">
-              <div className="text-[12px] font-semibold">{s.name}</div>
-              <div className="text-[11px] leading-relaxed" style={{ color: 'var(--m)' }}>{s.hint}</div>
-            </div>
-            {s.href && <span className="text-[11px] text-accent font-semibold flex-shrink-0 ml-1">Open →</span>}
+    <Modal open={open} onClose={onClose} title="📥 Import Calendar" subtitle="Pull in your busy dates to fill availability automatically.">
+      {/* Tab switcher */}
+      <div className="flex gap-0.5 mb-5 bg-surface2 p-[3px] rounded-[7px] border border-border">
+        {([['iphone', '📱 iPhone / iCloud'], ['other', '🖥️ Other']] as const).map(([key, label]) => (
+          <button key={key} onClick={() => { setMode(key); setError('') }}
+            className={`flex-1 py-[7px] px-2 rounded-[5px] text-[12px] font-semibold cursor-pointer border-none font-sans transition-all ${mode === key ? 'bg-surface text-[var(--t)] shadow-sm shadow-black/10' : 'bg-transparent'}`}
+            style={mode !== key ? { color: 'var(--m)' } : {}}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {mode === 'iphone' && (
+        <>
+          <div className="bg-surface2 border border-border rounded-[8px] p-3.5 mb-4">
+            <p className="text-[12px] font-semibold mb-2">Get your webcal link:</p>
+            <ol className="text-[12px] leading-relaxed" style={{ color: 'var(--t2)', paddingLeft: '1.1em', listStyleType: 'decimal' }}>
+              <li>Open the <strong>Calendar</strong> app</li>
+              <li>Tap <strong>Calendars</strong> at the bottom</li>
+              <li>Tap <strong>ⓘ</strong> next to the calendar you want to import</li>
+              <li>Toggle on <strong>Public Calendar</strong></li>
+              <li>Tap <strong>Share Link</strong> and copy it</li>
+            </ol>
           </div>
-        )
-        return s.href
-          ? <a key={s.name} href={s.href} target="_blank" rel="noopener noreferrer" className="block no-underline">{inner}</a>
-          : <div key={s.name}>{inner}</div>
-      })}
-    </div>
+          <Field label="Paste your webcal:// link here">
+            <Input
+              placeholder="webcal://p08-caldav.icloud.com/published/2/..."
+              value={webcalUrl}
+              onChange={e => { setWebcalUrl(e.target.value); setError('') }}
+              onKeyDown={e => e.key === 'Enter' && handleWebcal()}
+            />
+          </Field>
+          {error && <p className="text-red text-[12px] -mt-2 mb-3">{error}</p>}
+          <ModalActions>
+            <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+            <Btn variant="primary" disabled={!webcalUrl.trim() || loading} onClick={handleWebcal}>
+              {loading ? 'Fetching…' : 'Import from Link'}
+            </Btn>
+          </ModalActions>
+        </>
+      )}
+
+      {mode === 'other' && (
+        <>
+          <div className="grid grid-cols-1 gap-1.5 mb-4">
+            {OTHER_CAL_SOURCES.map(s => {
+              const inner = (
+                <div className={`flex items-center gap-3 px-3 py-2.5 bg-surface2 border border-border rounded-[7px] transition-colors ${s.href ? 'hover:border-border2 hover:bg-surface3' : ''}`}
+                  style={!s.href ? { opacity: 0.7 } : {}}>
+                  <span className="text-[17px] flex-shrink-0">{s.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] font-semibold">{s.name}</div>
+                    <div className="text-[11px] leading-relaxed" style={{ color: 'var(--m)' }}>{s.hint}</div>
+                  </div>
+                  {s.href && <span className="text-[11px] text-accent font-semibold flex-shrink-0">Open →</span>}
+                </div>
+              )
+              return s.href
+                ? <a key={s.name} href={s.href} target="_blank" rel="noopener noreferrer" className="block no-underline">{inner}</a>
+                : <div key={s.name}>{inner}</div>
+            })}
+          </div>
+          <Field label="Paste .ics file contents">
+            <Textarea rows={5} placeholder={'BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\n...'} value={icsText} onChange={e => setIcsText(e.target.value)} />
+          </Field>
+          <ModalActions>
+            <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+            <Btn variant="primary" disabled={!icsText.trim()} onClick={handlePaste}>Import Busy Dates</Btn>
+          </ModalActions>
+        </>
+      )}
+    </Modal>
   )
 }
 
