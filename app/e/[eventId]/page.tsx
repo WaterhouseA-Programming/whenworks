@@ -1,0 +1,482 @@
+'use client'
+import React, { useState, useEffect, useCallback } from 'react'
+import { useParams } from 'next/navigation'
+import {
+  Btn, Card, Chip, Label, Modal, ModalActions, Field, Input, Textarea, Select,
+  Toast, Avatar, Tabs, Badge, ProgressDots, NotifItem, getColour, getInitials,
+} from '@/components/ui'
+import { OverviewGrid, AvailPicker } from '@/components/AvailGrid'
+import { bestDates, fmtDate, fmtLong, daysSince, makeICS, parseICS, getDates } from '@/lib/utils'
+import type { EventFull, AttendeeWithAvail, AvailStatus } from '@/types'
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || ''
+const TIME_SLOT_LABELS: Record<string, string> = { morning: '🌅 Morning', afternoon: '☀️ Afternoon', evening: '🌙 Evening', allday: '📅 All Day' }
+
+export default function EventPage() {
+  const { eventId } = useParams<{ eventId: string }>()
+  const [ev, setEv] = useState<EventFull | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState('overview')
+  const [activeAttId, setActiveAttId] = useState<string | null>(null)
+  const [filterWeekends, setFilterWeekends] = useState(false)
+  const [toast, setToast] = useState<{ msg: string; icon: string; colour?: string } | null>(null)
+
+  // Modals
+  const [showAdd, setShowAdd] = useState(false)
+  const [showFinalise, setShowFinalise] = useState(false)
+  const [showShare, setShowShare] = useState(false)
+  const [showICS, setShowICS] = useState(false)
+  const [showDel, setShowDel] = useState(false)
+
+  // Form state
+  const [addName, setAddName] = useState('')
+  const [addEmail, setAddEmail] = useState('')
+  const [finalDate, setFinalDate] = useState('')
+  const [finalNote, setFinalNote] = useState('')
+  const [icsText, setIcsText] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [localAvail, setLocalAvail] = useState<Record<string, AvailStatus>>({})
+
+  const showToast = useCallback((msg: string, icon: string, colour?: string) => {
+    setToast({ msg, icon, colour }); setTimeout(() => setToast(null), 2800)
+  }, [])
+
+  const load = useCallback(async () => {
+    const r = await fetch(`/api/events/${eventId}`)
+    if (r.ok) {
+      const data = await r.json()
+      setEv(data)
+      if (!activeAttId) setActiveAttId(data.attendees[0]?.id || null)
+      setLoading(false)
+    }
+  }, [eventId, activeAttId])
+
+  useEffect(() => { load() }, [eventId])
+
+  useEffect(() => {
+    if (activeAttId && ev) {
+      const att = ev.attendees.find(a => a.id === activeAttId)
+      setLocalAvail(att?.availability || {})
+    }
+  }, [activeAttId, ev])
+
+  if (loading) return (
+    <div className="max-w-[960px] mx-auto px-4 py-20 text-center text-muted text-[13px]">Loading…</div>
+  )
+  if (!ev) return (
+    <div className="max-w-[960px] mx-auto px-4 py-20 text-center">
+      <h2 className="text-[20px] font-bold mb-2">Event not found</h2>
+      <p className="text-muted text-[13px] mb-5">This event may have been deleted.</p>
+      <Btn variant="secondary" onClick={() => window.location.href = '/'}>← Back to events</Btn>
+    </div>
+  )
+
+  const best = bestDates(ev.attendees, ev.start_date, ev.days_to_show, ev.duration) as any[]
+  const unread = ev.notifications.filter(n => !n.read).length
+  const filled = ev.attendees.filter(a => Object.keys(a.availability).length > 0).length
+  const isMulti = ev.duration > 1
+
+  // Mark notifications read when opening alerts tab
+  const switchTab = async (t: string) => {
+    setTab(t)
+    if (t === 'notifications' && unread > 0) {
+      await fetch('/api/notifications/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_id: ev.id }) })
+      setEv(p => p ? { ...p, notifications: p.notifications.map(n => ({ ...n, read: true })) } : p)
+    }
+  }
+
+  // Add attendee
+  const handleAdd = async () => {
+    if (!addName.trim() || !addEmail.trim()) return
+    const r = await fetch('/api/attendees', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_id: ev.id, name: addName, email: addEmail }),
+    })
+    if (r.ok) {
+      const att = await r.json()
+      setEv(p => p ? { ...p, attendees: [...p.attendees, att] } : p)
+      setAddName(''); setAddEmail(''); setShowAdd(false)
+      showToast(`${addName} added and invited!`, '👤', 'var(--a)')
+    }
+  }
+
+  // Nudge attendee
+  const handleNudge = async (attId: string) => {
+    const att = ev.attendees.find(a => a.id === attId)
+    const r = await fetch('/api/nudge', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attendee_id: attId }),
+    })
+    if (r.ok) {
+      await load()
+      showToast(`Nudge sent to ${att?.name}!`, '📨', 'var(--a)')
+    }
+  }
+
+  // Save availability
+  const handleSaveAvail = async () => {
+    if (!activeAttId) return
+    setSaving(true)
+    const r = await fetch(`/api/attendees/${activeAttId}/availability`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ availability: localAvail }),
+    })
+    if (r.ok) {
+      await load()
+      showToast('Availability saved!', '✓', 'var(--g)')
+    }
+    setSaving(false)
+  }
+
+  // ICS import
+  const handleICS = () => {
+    if (!icsText.trim() || !activeAttId) return
+    const busy = parseICS(icsText)
+    const dates = getDates(ev.start_date, ev.days_to_show)
+    const updated = { ...localAvail }
+    dates.forEach(d => { if (busy.includes(d)) updated[d] = 'busy'; else if (!updated[d]) updated[d] = 'free' })
+    setLocalAvail(updated)
+    setIcsText(''); setShowICS(false)
+    showToast(`${busy.length} busy dates imported`, '📥', 'var(--a)')
+  }
+
+  // Finalise
+  const handleFinalise = async () => {
+    const date = finalDate || best[0]?.date || best[0]?.startDate
+    if (!date) { showToast('Please pick a date', '⚠', 'var(--am)'); return }
+    const r = await fetch(`/api/events/${ev.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'decide', decided_date: date, decided_note: finalNote }),
+    })
+    if (r.ok) {
+      await load(); setShowFinalise(false)
+      showToast(`Date confirmed: ${fmtDate(date)}`, '✅', 'var(--g)')
+    }
+  }
+
+  // Delete
+  const handleDelete = async () => {
+    const r = await fetch(`/api/events/${ev.id}`, { method: 'DELETE' })
+    if (r.ok) { window.location.href = '/' }
+  }
+
+  // Download ICS
+  const downloadICS = () => {
+    if (!ev.decided_date) return
+    const content = makeICS(ev.title, ev.decided_date, ev.decided_note || '')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([content], { type: 'text/calendar' }))
+    a.download = `${ev.title.replace(/[^a-z0-9]/gi, '_')}.ics`
+    a.click()
+    showToast('Calendar file downloaded!', '📥', 'var(--a)')
+  }
+
+  const tabItems = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'availability', label: 'My Avail.' },
+    { key: 'attendees', label: 'Attendees' },
+    { key: 'notifications', label: <span>Alerts{unread > 0 && <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[9px] font-bold" style={{ background: '#5b8ef0' }}>{unread}</span>}</span> },
+  ]
+
+  return (
+    <div className="max-w-[960px] mx-auto px-4 pb-24">
+      {/* Nav */}
+      <nav className="flex items-center justify-between py-4 border-b border-border mb-7 sticky top-0 bg-bg z-10">
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => window.location.href = '/'}>
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-sm" style={{ background: 'linear-gradient(135deg,#5b8ef0,#c084fc)' }}>📅</div>
+          <span className="font-bold text-[18px] tracking-[-0.3px]">WhenWorks<span className="text-muted font-normal">.</span></span>
+        </div>
+        <div className="flex gap-2">
+          <Btn variant="secondary" size="sm" onClick={() => setShowAdd(true)}>+ Invite</Btn>
+          <Btn variant="secondary" size="sm" onClick={() => setShowShare(true)}>🔗 Share</Btn>
+        </div>
+      </nav>
+
+      {/* Event header */}
+      <div className="flex items-start gap-2.5 mb-4">
+        <Btn variant="ghost" size="sm" onClick={() => window.location.href = '/'}>← Back</Btn>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: ev.colour }} />
+            <h1 className="font-bold text-[clamp(15px,3.5vw,22px)]">{ev.title}</h1>
+            {ev.status === 'decided' && <Chip colour="green">✓ Decided</Chip>}
+          </div>
+          <div className="text-muted text-[12px] mt-1">
+            By {ev.organiser_name} · {fmtDate(ev.start_date)} · {ev.days_to_show}d window
+            {ev.duration > 1 && ` · ${ev.duration} consecutive days`}
+          </div>
+        </div>
+        <Btn variant="danger" size="xs" onClick={() => setShowDel(true)}>Delete</Btn>
+      </div>
+
+      {/* Tabs */}
+      <Tabs tabs={tabItems} active={tab} onChange={switchTab} />
+
+      {/* ── Overview Tab ── */}
+      {tab === 'overview' && (
+        <>
+          {/* Decided banner */}
+          {ev.status === 'decided' && ev.decided_date && (
+            <div className="bg-green/[0.08] border border-green/25 rounded-[10px] p-4 mb-3.5 flex items-center gap-3.5">
+              <span className="text-[24px] flex-shrink-0">✅</span>
+              <div className="flex-1">
+                <h3 className="text-[15px] font-bold text-green mb-0.5">Date confirmed: {fmtLong(ev.decided_date)}</h3>
+                {ev.decided_note && <p className="text-[12px] text-[var(--t2)]">{ev.decided_note}</p>}
+                <div className="mt-2">
+                  <Btn variant="green" size="xs" onClick={downloadICS}>📥 Add to Calendar (.ics)</Btn>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Best dates */}
+          {best.length > 0 && best[0].score > 0 && (
+            <Card>
+              <Label>🏆 Best {isMulti ? 'Date Runs' : 'Dates'}</Label>
+              <div className="flex flex-wrap mb-3">
+                {best.filter(b => b.score > 0).slice(0, isMulti ? 4 : 6).map((b, i) => {
+                  const lbl = isMulti ? `${fmtDate(b.startDate)} – ${fmtDate(b.endDate)}` : fmtDate(b.date)
+                  return (
+                    <span key={i} className={`inline-flex items-center gap-1.5 border rounded-[6px] px-3 py-1.5 text-[12px] font-semibold m-1 ${i === 0 ? 'bg-green/15 border-green/40 text-green text-[13px]' : 'bg-green/[0.08] border-green/22 text-green'}`}>
+                      {i === 0 && '⭐ '}{lbl}
+                      <span className="opacity-60 text-[11px]">{b.free}/{b.total}</span>
+                    </span>
+                  )
+                })}
+              </div>
+              {ev.status !== 'decided' && (
+                <Btn variant="green" size="sm" onClick={() => { setFinalDate(best[0]?.date || best[0]?.startDate || ''); setShowFinalise(true) }}>
+                  ✓ Finalise a Date
+                </Btn>
+              )}
+            </Card>
+          )}
+
+          <Card>
+            <div className="flex justify-between items-center flex-wrap gap-2 mb-3.5">
+              <Label>Availability Overview</Label>
+              <button
+                onClick={() => setFilterWeekends(v => !v)}
+                className={`text-[11px] px-2.5 py-1 rounded-[5px] border font-semibold cursor-pointer transition-all font-sans ${filterWeekends ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-surface2 text-muted hover:border-border2 hover:text-[var(--t)]'}`}
+              >
+                {filterWeekends ? '✓ ' : ''}Hide Weekends
+              </button>
+            </div>
+            {ev.description && (
+              <div className="text-[12px] text-muted bg-surface2 rounded-[6px] px-3 py-2 mb-3.5 leading-relaxed">{ev.description}</div>
+            )}
+            {ev.time_slots?.length > 0 && (
+              <div className="text-[12px] text-muted mb-3">⏰ {ev.time_slots.map(s => TIME_SLOT_LABELS[s] || s).join(' · ')}</div>
+            )}
+            <OverviewGrid attendees={ev.attendees} startDate={ev.start_date} daysToShow={ev.days_to_show} hideWeekends={filterWeekends} />
+          </Card>
+
+          <Card>
+            <Label>Completion</Label>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ProgressDots attendees={ev.attendees} />
+              <span className="text-[12px] text-muted">{filled}/{ev.attendees.length} filled in</span>
+            </div>
+          </Card>
+        </>
+      )}
+
+      {/* ── Availability Tab ── */}
+      {tab === 'availability' && (
+        <>
+          <Card>
+            <Label>Filling in as</Label>
+            <div className="flex gap-1.5 flex-wrap">
+              {ev.attendees.map(a => (
+                <button key={a.id} onClick={() => setActiveAttId(a.id)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[7px] text-[12px] font-semibold cursor-pointer border transition-all font-sans ${activeAttId === a.id ? 'text-white border-transparent' : 'bg-surface2 border-border text-muted hover:border-border2 hover:text-[var(--t)]'}`}
+                  style={activeAttId === a.id ? { background: getColour(a.name) } : {}}>
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: activeAttId === a.id ? 'rgba(255,255,255,0.7)' : getColour(a.name) }} />
+                  {a.name}
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          <Card>
+            <div className="flex justify-between items-start mb-3 flex-wrap gap-2">
+              <div>
+                <Label>Your Availability</Label>
+                <div className="text-[11px] text-muted">Tap: Free → Maybe → Busy → Clear &nbsp;·&nbsp; Or drag across multiple days</div>
+                {ev.time_slots?.length > 0 && (
+                  <div className="text-[11px] text-muted mt-0.5">Time slots: {ev.time_slots.map(s => TIME_SLOT_LABELS[s] || s).join(', ')}</div>
+                )}
+              </div>
+              <Btn variant="secondary" size="xs" onClick={() => setShowICS(true)}>📥 Import Calendar</Btn>
+            </div>
+
+            <AvailPicker
+              startDate={ev.start_date}
+              daysToShow={ev.days_to_show}
+              initial={localAvail}
+              onChange={setLocalAvail}
+            />
+
+            <div className="flex justify-end mt-4">
+              <Btn variant="primary" onClick={handleSaveAvail} disabled={saving}>
+                {saving ? 'Saving…' : 'Save Availability'}
+              </Btn>
+            </div>
+          </Card>
+        </>
+      )}
+
+      {/* ── Attendees Tab ── */}
+      {tab === 'attendees' && (
+        <>
+          {best.length > 0 && best[0].score > 0 && (
+            <div className="bg-green/[0.05] border border-green/18 rounded-[10px] p-4 mb-3.5 flex items-center gap-3">
+              <span className="text-[22px]">🏆</span>
+              <div className="flex-1">
+                <div className="font-bold text-[14px] text-green">
+                  Best date{isMulti ? ' run' : ''} so far: {isMulti ? `${fmtDate(best[0].startDate)} – ${fmtDate(best[0].endDate)}` : fmtDate(best[0].date)}
+                </div>
+                <div className="text-[12px] text-[var(--t2)] mt-0.5">{best[0].free}/{best[0].total} respondents free{isMulti ? ' each day' : ''}</div>
+              </div>
+              {ev.status !== 'decided' && (
+                <Btn variant="green" size="sm" onClick={() => { setFinalDate(best[0]?.date || best[0]?.startDate || ''); setShowFinalise(true) }}>Finalise</Btn>
+              )}
+            </div>
+          )}
+
+          <Card>
+            <div className="flex justify-between items-center mb-4">
+              <Label>Attendees ({ev.attendees.length})</Label>
+              <Btn variant="secondary" size="sm" onClick={() => setShowAdd(true)}>+ Add Person</Btn>
+            </div>
+
+            {ev.attendees.map(a => {
+              const hasFilled = Object.keys(a.availability).length > 0
+              const nd = a.nudged_at ? daysSince(a.nudged_at) : null
+              const jd = daysSince(a.joined_at)
+              const isOverdue = ev.nudge_after > 0 && !hasFilled && !a.nudged_at && jd >= ev.nudge_after
+              return (
+                <div key={a.id} className="flex items-center gap-2.5 py-2.5 border-b border-border last:border-b-0">
+                  <Avatar name={a.name} size={32} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold flex items-center gap-1.5">
+                      {a.name}
+                      {a.is_organiser && <span className="text-[10px] text-accent font-medium">organiser</span>}
+                    </div>
+                    <div className="text-[11px] text-muted">{a.email} · Joined {jd === 0 ? 'today' : `${jd}d ago`}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {hasFilled
+                      ? <Badge colour="green">✓ Filled</Badge>
+                      : a.nudged_at
+                        ? <Badge colour="blue">Nudged {nd === 0 ? 'today' : `${nd}d ago`}</Badge>
+                        : isOverdue
+                          ? <Badge colour="red">⚠ Overdue</Badge>
+                          : <Badge colour="amber">Pending</Badge>}
+                    {!hasFilled && !a.is_organiser && (
+                      <Btn variant="ghost" size="xs" onClick={() => handleNudge(a.id)}>📨 Nudge</Btn>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+
+            {ev.nudge_after > 0 && (
+              <div className="text-[11px] text-muted mt-3 px-3 py-2 bg-surface2 rounded-[6px] border border-border">
+                ⚡ Auto-nudge: attendees who haven't filled in after {ev.nudge_after} day{ev.nudge_after > 1 ? 's' : ''} are flagged automatically.
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+
+      {/* ── Notifications Tab ── */}
+      {tab === 'notifications' && (
+        ev.notifications.length === 0
+          ? <div className="text-center py-16">
+              <div className="text-[36px] mb-3">🔔</div>
+              <h3 className="font-bold text-[17px] mb-1.5">No notifications yet</h3>
+              <p className="text-muted text-[13px] max-w-[280px] mx-auto leading-relaxed">You'll be notified when everyone fills in, when nudges are sent, or when a date is confirmed.</p>
+            </div>
+          : <div>{ev.notifications.map(n => <NotifItem key={n.id} notif={n} />)}</div>
+      )}
+
+      {/* ── Add Attendee Modal ── */}
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Attendee" subtitle="They'll receive an email with a unique link to fill in their availability.">
+        <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+          <Field label="Name"><Input placeholder="Jordan" value={addName} onChange={e => setAddName(e.target.value)} /></Field>
+          <Field label="Email"><Input type="email" placeholder="jordan@example.com" value={addEmail} onChange={e => setAddEmail(e.target.value)} /></Field>
+        </div>
+        <ModalActions>
+          <Btn variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Btn>
+          <Btn variant="primary" disabled={!addName || !addEmail} onClick={handleAdd}>Add & Send Invite</Btn>
+        </ModalActions>
+      </Modal>
+
+      {/* ── Finalise Modal ── */}
+      <Modal open={showFinalise} onClose={() => setShowFinalise(false)} title="Finalise a Date" subtitle="Lock in the chosen date and mark this event as decided. All attendees will be emailed with the confirmation and a calendar file.">
+        {best.filter(b => b.score > 0).slice(0, 5).map((b, i) => {
+          const dateVal = isMulti ? b.startDate : b.date
+          const lbl = isMulti ? `${fmtDate(b.startDate)} – ${fmtDate(b.endDate)}` : fmtDate(b.date)
+          return (
+            <div key={i} onClick={() => setFinalDate(dateVal)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-[7px] border mb-2 cursor-pointer transition-all ${finalDate === dateVal ? 'border-accent bg-accent/[0.08]' : 'border-border bg-surface2 hover:border-border2'}`}>
+              <input type="radio" name="fd" readOnly checked={finalDate === dateVal} />
+              <div className="flex-1">
+                <div className="text-[13px] font-semibold">{lbl}</div>
+                <div className="text-[11px] text-muted">{b.free}/{b.total} free{isMulti ? ' each day' : ''}</div>
+              </div>
+              {i === 0 && <span className="text-[11px] text-green font-semibold">Best</span>}
+            </div>
+          )
+        })}
+        <Field label="Or enter a custom date"><Input type="date" value={finalDate} onChange={e => setFinalDate(e.target.value)} /></Field>
+        <Field label="Note to attendees (optional)"><Textarea placeholder="See you there! Venue details to follow…" value={finalNote} onChange={e => setFinalNote(e.target.value)} /></Field>
+        <ModalActions>
+          <Btn variant="ghost" onClick={() => setShowFinalise(false)}>Cancel</Btn>
+          <Btn variant="green" onClick={handleFinalise}>✓ Confirm Date</Btn>
+        </ModalActions>
+      </Modal>
+
+      {/* ── ICS Import Modal ── */}
+      <Modal open={showICS} onClose={() => setShowICS(false)} title="📥 Import Calendar" subtitle="Export your calendar as an .ics file and paste the contents below to auto-mark your busy dates.">
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {['🍎 iPhone: Calendar → tap calendar → Export Calendar', '🤖 Google: calendar.google.com → Settings → Export', '📆 Outlook: File → Open & Export → Export to iCalendar'].map(s => (
+            <div key={s} className="px-2.5 py-1.5 bg-surface3 border border-border rounded-[7px] text-[11px] text-[var(--t2)]">{s}</div>
+          ))}
+        </div>
+        <Field label="Paste .ics contents">
+          <Textarea rows={6} placeholder={'BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\n...'} value={icsText} onChange={e => setIcsText(e.target.value)} />
+        </Field>
+        <ModalActions>
+          <Btn variant="ghost" onClick={() => setShowICS(false)}>Cancel</Btn>
+          <Btn variant="primary" disabled={!icsText.trim()} onClick={handleICS}>Import Busy Dates</Btn>
+        </ModalActions>
+      </Modal>
+
+      {/* ── Share Modal ── */}
+      <Modal open={showShare} onClose={() => setShowShare(false)} title="Share Event" subtitle="Send this link to attendees. Each person gets a unique personalised link via email when added.">
+        <div className="bg-surface2 border border-border rounded-[7px] px-3 py-2.5 flex items-center gap-2.5 mt-1">
+          <code className="flex-1 text-[12px] text-muted overflow-hidden text-ellipsis whitespace-nowrap">
+            {APP_URL}/e/{ev.id}
+          </code>
+          <Btn variant="secondary" size="xs" onClick={() => { navigator.clipboard?.writeText(`${APP_URL}/e/${ev.id}`); showToast('Link copied!', '🔗', 'var(--a)') }}>Copy</Btn>
+        </div>
+        <p className="text-[12px] text-muted mt-3 leading-relaxed">
+          Attendees added via "+ Invite" receive a personal link by email — their link auto-selects their name in the availability view.
+        </p>
+        <ModalActions><Btn variant="ghost" onClick={() => setShowShare(false)}>Close</Btn></ModalActions>
+      </Modal>
+
+      {/* ── Delete Modal ── */}
+      <Modal open={showDel} onClose={() => setShowDel(false)} title="Delete event?" subtitle="This permanently removes the event and all availability data. This cannot be undone.">
+        <ModalActions>
+          <Btn variant="ghost" onClick={() => setShowDel(false)}>Cancel</Btn>
+          <Btn variant="danger" onClick={handleDelete}>Delete Event</Btn>
+        </ModalActions>
+      </Modal>
+
+      {toast && <Toast {...toast} />}
+    </div>
+  )
+}

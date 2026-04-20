@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0c0c0f;
+  --s1: #131317;
+  --s2: #1a1a20;
+  --s3: #222229;
+  --b:  #2a2a35;
+  --b2: #363644;
+  --t:  #eeeef5;
+  --t2: #b0b0c0;
+  --m:  #72728a;
+  --a:  #5b8ef0;
+  --a2: #c084fc;
+  --g:  #34d88a;
+  --am: #f59e0b;
+  --r:  #f05b5b;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--t);
+  font-family: 'Manrope', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* Avail grid cells */
+.ac {
+  width: 38px; height: 38px;
+  border-radius: 5px;
+  border: 1.5px solid var(--b);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .1s;
+  background: var(--s2);
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+  user-select: none;
+}
+.ac:hover { border-color: var(--a); transform: scale(1.08); }
+.ac.free  { background: rgba(52,216,138,.14); border-color: rgba(52,216,138,.38); color: var(--g); }
+.ac.busy  { background: rgba(240,91,91,.10);  border-color: rgba(240,91,91,.28);  color: var(--r); }
+.ac.maybe { background: rgba(245,158,11,.10); border-color: rgba(245,158,11,.30); color: var(--am); }
+.ac.sf    { background: rgba(52,216,138,.22); border-color: rgba(52,216,138,.55); }
+.ac.sp    { background: rgba(245,158,11,.13); border-color: rgba(245,158,11,.32); }
+.ac.sn    { background: rgba(240,91,91,.07);  border-color: rgba(240,91,91,.14);  }
+.ac.lk    { cursor: default; }
+.ac.lk:hover { transform: none; }
+.ac.sm    { height: 24px; }
+.ac.weekend { opacity: .35; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--b2); border-radius: 3px; }
