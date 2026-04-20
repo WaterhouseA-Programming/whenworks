@@ -108,5 +108,5 @@ export function parseICS(text: string): string[] {
       while (cur < end) { busy.add(cur); cur = addDaysStr(cur, 1) }
     }
   }
-  return [...busy]
+  return Array.from(busy)
 }
