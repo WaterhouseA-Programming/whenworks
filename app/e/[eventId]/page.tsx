@@ -3,14 +3,20 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import {
   Btn, Card, Chip, Label, Modal, ModalActions, Field, Input, Textarea, Select,
-  Toast, Avatar, Tabs, Badge, ProgressDots, NotifItem, getColour, getInitials,
+  Toast, Avatar, Tabs, Badge, ProgressDots, NotifItem, getColour,
 } from '@/components/ui'
 import { OverviewGrid, AvailPicker } from '@/components/AvailGrid'
 import { bestDates, fmtDate, fmtLong, daysSince, makeICS, parseICS, getDates } from '@/lib/utils'
-import type { EventFull, AttendeeWithAvail, AvailStatus } from '@/types'
+import type { EventFull, AvailStatus } from '@/types'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || ''
 const TIME_SLOT_LABELS: Record<string, string> = { morning: '🌅 Morning', afternoon: '☀️ Afternoon', evening: '🌙 Evening', allday: '📅 All Day' }
+const TIME_SLOTS = [
+  { key: 'morning', label: '🌅 Morning' },
+  { key: 'afternoon', label: '☀️ Afternoon' },
+  { key: 'evening', label: '🌙 Evening' },
+  { key: 'allday', label: '📅 All Day' },
+]
 
 export default function EventPage() {
   const { eventId } = useParams<{ eventId: string }>()
@@ -19,7 +25,6 @@ export default function EventPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState(searchParams.get('tab') || 'overview')
   const [activeAttId, setActiveAttId] = useState<string | null>(null)
-  const [filterWeekends, setFilterWeekends] = useState(false)
   const [toast, setToast] = useState<{ msg: string; icon: string; colour?: string } | null>(null)
 
   // Modals
@@ -37,6 +42,17 @@ export default function EventPage() {
   const [icsText, setIcsText] = useState('')
   const [saving, setSaving] = useState(false)
   const [localAvail, setLocalAvail] = useState<Record<string, AvailStatus>>({})
+
+  // Settings state
+  const [settings, setSettings] = useState({
+    hide_weekends: false,
+    nudge_after: 2,
+    time_slots: ['allday'] as string[],
+    start_date: '',
+    days_to_show: 14,
+    duration: 1,
+  })
+  const [savingSettings, setSavingSettings] = useState(false)
 
   const showToast = useCallback((msg: string, icon: string, colour?: string) => {
     setToast({ msg, icon, colour }); setTimeout(() => setToast(null), 2800)
@@ -61,6 +77,20 @@ export default function EventPage() {
     }
   }, [activeAttId, ev])
 
+  // Sync settings state when event loads
+  useEffect(() => {
+    if (ev) {
+      setSettings({
+        hide_weekends: ev.hide_weekends ?? false,
+        nudge_after: ev.nudge_after,
+        time_slots: ev.time_slots,
+        start_date: ev.start_date,
+        days_to_show: ev.days_to_show,
+        duration: ev.duration,
+      })
+    }
+  }, [ev?.id])
+
   if (loading) return (
     <div className="max-w-[960px] mx-auto px-4 py-20 text-center text-[13px]" style={{ color: 'var(--m)' }}>Loading…</div>
   )
@@ -72,13 +102,13 @@ export default function EventPage() {
     </div>
   )
 
-  const best = bestDates(ev.attendees, ev.start_date, ev.days_to_show, ev.duration) as any[]
+  const hideWeekends = ev.hide_weekends ?? false
+  const best = bestDates(ev.attendees, ev.start_date, ev.days_to_show, ev.duration, hideWeekends) as any[]
   const unread = ev.notifications.filter(n => !n.read).length
   const filled = ev.attendees.filter(a => Object.keys(a.availability).length > 0).length
   const isMulti = ev.duration > 1
   const joinLink = `${APP_URL}/join/${ev.id}`
 
-  // Mark notifications read when opening alerts tab
   const switchTab = async (t: string) => {
     setTab(t)
     if (t === 'notifications' && unread > 0) {
@@ -87,7 +117,6 @@ export default function EventPage() {
     }
   }
 
-  // Add attendee
   const handleAdd = async () => {
     if (!addName.trim() || !addEmail.trim()) return
     const r = await fetch('/api/attendees', {
@@ -102,20 +131,15 @@ export default function EventPage() {
     }
   }
 
-  // Nudge attendee
   const handleNudge = async (attId: string) => {
     const att = ev.attendees.find(a => a.id === attId)
     const r = await fetch('/api/nudge', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ attendee_id: attId }),
     })
-    if (r.ok) {
-      await load()
-      showToast(`Nudge sent to ${att?.name}!`, '📨', 'var(--a)')
-    }
+    if (r.ok) { await load(); showToast(`Nudge sent to ${att?.name}!`, '📨', 'var(--a)') }
   }
 
-  // Save availability
   const handleSaveAvail = async () => {
     if (!activeAttId) return
     setSaving(true)
@@ -123,14 +147,10 @@ export default function EventPage() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ availability: localAvail }),
     })
-    if (r.ok) {
-      await load()
-      showToast('Availability saved!', '✓', 'var(--g)')
-    }
+    if (r.ok) { await load(); showToast('Availability saved!', '✓', 'var(--g)') }
     setSaving(false)
   }
 
-  // ICS import
   const handleICS = () => {
     if (!icsText.trim() || !activeAttId) return
     const busy = parseICS(icsText)
@@ -142,7 +162,6 @@ export default function EventPage() {
     showToast(`${busy.length} busy dates imported`, '📥', 'var(--a)')
   }
 
-  // Finalise
   const handleFinalise = async () => {
     const date = finalDate || best[0]?.date || best[0]?.startDate
     if (!date) { showToast('Please pick a date', '⚠', 'var(--am)'); return }
@@ -150,19 +169,14 @@ export default function EventPage() {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'decide', decided_date: date, decided_note: finalNote }),
     })
-    if (r.ok) {
-      await load(); setShowFinalise(false)
-      showToast(`Date confirmed: ${fmtDate(date)}`, '✅', 'var(--g)')
-    }
+    if (r.ok) { await load(); setShowFinalise(false); showToast(`Date confirmed: ${fmtDate(date)}`, '✅', 'var(--g)') }
   }
 
-  // Delete
   const handleDelete = async () => {
     const r = await fetch(`/api/events/${ev.id}`, { method: 'DELETE' })
     if (r.ok) { window.location.href = '/' }
   }
 
-  // Download ICS
   const downloadICS = () => {
     if (!ev.decided_date) return
     const content = makeICS(ev.title, ev.decided_date, ev.decided_note || '')
@@ -173,10 +187,29 @@ export default function EventPage() {
     showToast('Calendar file downloaded!', '📥', 'var(--a)')
   }
 
+  const handleSaveSettings = async () => {
+    setSavingSettings(true)
+    const r = await fetch(`/api/events/${ev.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    })
+    if (r.ok) { await load(); showToast('Settings saved!', '✓', 'var(--g)') }
+    setSavingSettings(false)
+  }
+
+  const toggleTS = (key: string) =>
+    setSettings(p => ({
+      ...p,
+      time_slots: p.time_slots.includes(key)
+        ? p.time_slots.filter(k => k !== key)
+        : [...p.time_slots, key],
+    }))
+
   const tabItems = [
     { key: 'overview', label: 'Overview' },
     { key: 'availability', label: 'My Avail.' },
     { key: 'attendees', label: 'Attendees' },
+    { key: 'settings', label: 'Settings' },
     { key: 'notifications', label: <span>Alerts{unread > 0 && <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[9px] font-bold" style={{ background: '#5b8ef0' }}>{unread}</span>}</span> },
   ]
 
@@ -206,6 +239,7 @@ export default function EventPage() {
           <div className="text-[12px] mt-1" style={{ color: 'var(--m)' }}>
             By {ev.organiser_name} · {fmtDate(ev.start_date)} · {ev.days_to_show}d window
             {ev.duration > 1 && ` · ${ev.duration} consecutive days`}
+            {hideWeekends && ' · weekdays only'}
           </div>
         </div>
         <Btn variant="danger" size="xs" onClick={() => setShowDel(true)}>Delete</Btn>
@@ -217,7 +251,6 @@ export default function EventPage() {
       {/* ── Overview Tab ── */}
       {tab === 'overview' && (
         <>
-          {/* What the organiser set up */}
           <Card>
             <Label>What we're looking for</Label>
             <p className="text-[15px] font-bold mb-1">
@@ -225,30 +258,25 @@ export default function EventPage() {
             </p>
             <p className="text-[13px]" style={{ color: 'var(--t2)' }}>
               From {fmtDate(ev.start_date)}, across a {ev.days_to_show}-day window
-              {ev.time_slots?.length > 0 && (
-                <span> · {ev.time_slots.map((s: string) => TIME_SLOT_LABELS[s] || s).join(', ')}</span>
-              )}
+              {ev.time_slots?.length > 0 && <span> · {ev.time_slots.map((s: string) => TIME_SLOT_LABELS[s] || s).join(', ')}</span>}
+              {hideWeekends && <span> · weekdays only</span>}
             </p>
             {ev.description && (
               <p className="text-[12px] mt-2 leading-relaxed" style={{ color: 'var(--t2)' }}>{ev.description}</p>
             )}
           </Card>
 
-          {/* Decided banner */}
           {ev.status === 'decided' && ev.decided_date && (
             <div className="bg-green/[0.08] border border-green/25 rounded-[10px] p-4 mb-3.5 flex items-center gap-3.5">
               <span className="text-[24px] flex-shrink-0">✅</span>
               <div className="flex-1">
                 <h3 className="text-[15px] font-bold text-green mb-0.5">Date confirmed: {fmtLong(ev.decided_date)}</h3>
                 {ev.decided_note && <p className="text-[12px]" style={{ color: 'var(--t2)' }}>{ev.decided_note}</p>}
-                <div className="mt-2">
-                  <Btn variant="green" size="xs" onClick={downloadICS}>📥 Add to Calendar (.ics)</Btn>
-                </div>
+                <div className="mt-2"><Btn variant="green" size="xs" onClick={downloadICS}>📥 Add to Calendar (.ics)</Btn></div>
               </div>
             </div>
           )}
 
-          {/* Best dates */}
           {best.length > 0 && best[0].score > 0 && (
             <Card>
               <Label>🏆 Best {isMulti ? 'Date Runs' : 'Dates'}</Label>
@@ -272,17 +300,8 @@ export default function EventPage() {
           )}
 
           <Card>
-            <div className="flex justify-between items-center flex-wrap gap-2 mb-3.5">
-              <Label>Availability Overview</Label>
-              <button
-                onClick={() => setFilterWeekends(v => !v)}
-                className={`text-[11px] px-2.5 py-1 rounded-[5px] border font-semibold cursor-pointer transition-all font-sans ${filterWeekends ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-surface2 hover:border-border2'}`}
-                style={filterWeekends ? {} : { color: 'var(--t)' }}
-              >
-                {filterWeekends ? '✓ ' : ''}Hide Weekends
-              </button>
-            </div>
-            <OverviewGrid attendees={ev.attendees} startDate={ev.start_date} daysToShow={ev.days_to_show} hideWeekends={filterWeekends} />
+            <Label>Availability Overview</Label>
+            <OverviewGrid attendees={ev.attendees} startDate={ev.start_date} daysToShow={ev.days_to_show} hideWeekends={hideWeekends} />
           </Card>
 
           <Card>
@@ -323,18 +342,9 @@ export default function EventPage() {
               </div>
               <Btn variant="secondary" size="xs" onClick={() => setShowICS(true)}>📥 Import Calendar</Btn>
             </div>
-
-            <AvailPicker
-              startDate={ev.start_date}
-              daysToShow={ev.days_to_show}
-              initial={localAvail}
-              onChange={setLocalAvail}
-            />
-
+            <AvailPicker startDate={ev.start_date} daysToShow={ev.days_to_show} initial={localAvail} onChange={setLocalAvail} hideWeekends={hideWeekends} />
             <div className="flex justify-end mt-4">
-              <Btn variant="primary" onClick={handleSaveAvail} disabled={saving}>
-                {saving ? 'Saving…' : 'Save Availability'}
-              </Btn>
+              <Btn variant="primary" onClick={handleSaveAvail} disabled={saving}>{saving ? 'Saving…' : 'Save Availability'}</Btn>
             </div>
           </Card>
         </>
@@ -383,13 +393,10 @@ export default function EventPage() {
                     <div className="text-[11px]" style={{ color: 'var(--m)' }}>{a.email} · Joined {jd === 0 ? 'today' : `${jd}d ago`}</div>
                   </div>
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {hasFilled
-                      ? <Badge colour="green">✓ Filled</Badge>
-                      : a.nudged_at
-                        ? <Badge colour="blue">Nudged {nd === 0 ? 'today' : `${nd}d ago`}</Badge>
-                        : isOverdue
-                          ? <Badge colour="red">⚠ Overdue</Badge>
-                          : <Badge colour="amber">Pending</Badge>}
+                    {hasFilled ? <Badge colour="green">✓ Filled</Badge>
+                      : a.nudged_at ? <Badge colour="blue">Nudged {nd === 0 ? 'today' : `${nd}d ago`}</Badge>
+                      : isOverdue ? <Badge colour="red">⚠ Overdue</Badge>
+                      : <Badge colour="amber">Pending</Badge>}
                     {!hasFilled && !a.is_organiser && (
                       <Btn variant="ghost" size="xs" onClick={() => handleNudge(a.id)}>📨 Nudge</Btn>
                     )}
@@ -400,10 +407,101 @@ export default function EventPage() {
 
             {ev.nudge_after > 0 && (
               <div className="text-[11px] mt-3 px-3 py-2 bg-surface2 rounded-[6px] border border-border" style={{ color: 'var(--m)' }}>
-                ⚡ Auto-nudge: attendees who haven't filled in after {ev.nudge_after} day{ev.nudge_after > 1 ? 's' : ''} are flagged automatically.
+                ⚡ Auto-nudge: attendees flagged after {ev.nudge_after} day{ev.nudge_after > 1 ? 's' : ''} without filling in.
               </div>
             )}
           </Card>
+        </>
+      )}
+
+      {/* ── Settings Tab ── */}
+      {tab === 'settings' && (
+        <>
+          <Card>
+            <Label>Scheduling</Label>
+
+            {/* Weekends toggle */}
+            <div className="flex items-center justify-between py-3 border-b border-border">
+              <div>
+                <div className="text-[13px] font-semibold">Include weekends</div>
+                <div className="text-[11px] mt-0.5" style={{ color: 'var(--m)' }}>
+                  When off, Sat &amp; Sun are hidden from the grid and excluded from best-date scoring
+                </div>
+              </div>
+              <button
+                onClick={() => setSettings(p => ({ ...p, hide_weekends: !p.hide_weekends }))}
+                className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 border-none cursor-pointer ${!settings.hide_weekends ? 'bg-accent' : 'bg-surface3'}`}
+                style={{ outline: 'none' }}
+              >
+                <span
+                  className="absolute top-[3px] w-[18px] h-[18px] bg-white rounded-full shadow transition-transform"
+                  style={{ left: !settings.hide_weekends ? 'calc(100% - 21px)' : '3px' }}
+                />
+              </button>
+            </div>
+
+            {/* Duration */}
+            <div className="flex items-center justify-between py-3 border-b border-border">
+              <div>
+                <div className="text-[13px] font-semibold">Duration needed</div>
+                <div className="text-[11px] mt-0.5" style={{ color: 'var(--m)' }}>How many consecutive days are required</div>
+              </div>
+              <Select
+                value={settings.duration}
+                onChange={e => setSettings(p => ({ ...p, duration: parseInt(e.target.value) }))}
+                className="w-40"
+              >
+                {[1,2,3,4,5].map(n => <option key={n} value={n}>{n} {n === 1 ? 'day' : 'consecutive days'}</option>)}
+              </Select>
+            </div>
+
+            {/* Date window */}
+            <div className="flex items-center justify-between py-3 border-b border-border gap-4">
+              <div className="flex-shrink-0">
+                <div className="text-[13px] font-semibold">Date window</div>
+                <div className="text-[11px] mt-0.5" style={{ color: 'var(--m)' }}>Start date and how many days to show</div>
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                <Input type="date" value={settings.start_date} onChange={e => setSettings(p => ({ ...p, start_date: e.target.value }))} className="w-36" />
+                <Select value={settings.days_to_show} onChange={e => setSettings(p => ({ ...p, days_to_show: parseInt(e.target.value) }))} className="w-28">
+                  {[7,10,14,21,28].map(n => <option key={n} value={n}>{n} days</option>)}
+                </Select>
+              </div>
+            </div>
+
+            {/* Auto-nudge */}
+            <div className="flex items-center justify-between py-3 border-b border-border">
+              <div>
+                <div className="text-[13px] font-semibold">Auto-nudge after</div>
+                <div className="text-[11px] mt-0.5" style={{ color: 'var(--m)' }}>Flag attendees who haven't filled in after this many days</div>
+              </div>
+              <Select value={settings.nudge_after} onChange={e => setSettings(p => ({ ...p, nudge_after: parseInt(e.target.value) }))} className="w-32">
+                <option value="0">Never</option>
+                {[1,2,3,5,7].map(n => <option key={n} value={n}>{n} day{n > 1 ? 's' : ''}</option>)}
+              </Select>
+            </div>
+
+            {/* Time of day */}
+            <div className="py-3">
+              <div className="text-[13px] font-semibold mb-1">Time of day preference</div>
+              <div className="text-[11px] mb-2.5" style={{ color: 'var(--m)' }}>Let attendees know what time of day you're considering</div>
+              <div className="flex gap-1.5 flex-wrap">
+                {TIME_SLOTS.map(ts => (
+                  <button key={ts.key} onClick={() => toggleTS(ts.key)}
+                    className={`px-3 py-1.5 rounded-[5px] border text-[12px] font-semibold cursor-pointer transition-all font-sans ${settings.time_slots.includes(ts.key) ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-surface2 hover:border-border2'}`}
+                    style={settings.time_slots.includes(ts.key) ? {} : { color: 'var(--t)' }}>
+                    {ts.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </Card>
+
+          <div className="flex justify-end">
+            <Btn variant="primary" onClick={handleSaveSettings} disabled={savingSettings}>
+              {savingSettings ? 'Saving…' : 'Save Settings'}
+            </Btn>
+          </div>
         </>
       )}
 
@@ -431,7 +529,7 @@ export default function EventPage() {
       </Modal>
 
       {/* ── Finalise Modal ── */}
-      <Modal open={showFinalise} onClose={() => setShowFinalise(false)} title="Finalise a Date" subtitle="Lock in the chosen date and mark this event as decided. All attendees will be emailed with the confirmation and a calendar file.">
+      <Modal open={showFinalise} onClose={() => setShowFinalise(false)} title="Finalise a Date" subtitle="Lock in the chosen date and notify all attendees with a calendar invite.">
         {best.filter(b => b.score > 0).slice(0, 5).map((b, i) => {
           const dateVal = isMulti ? b.startDate : b.date
           const lbl = isMulti ? `${fmtDate(b.startDate)} – ${fmtDate(b.endDate)}` : fmtDate(b.date)
@@ -475,17 +573,15 @@ export default function EventPage() {
       <Modal open={showShare} onClose={() => setShowShare(false)} title="🔗 Share Invite Link" subtitle="Anyone with this link can enter their details and add their availability — no email invite needed.">
         <Label>Invite link</Label>
         <div className="bg-surface2 border border-border rounded-[7px] px-3 py-2.5 flex items-center gap-2.5 mb-3">
-          <code className="flex-1 text-[12px] overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: 'var(--t2)' }}>
-            {joinLink}
-          </code>
+          <code className="flex-1 text-[12px] overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: 'var(--t2)' }}>{joinLink}</code>
           <Btn variant="primary" size="xs" onClick={() => { navigator.clipboard?.writeText(joinLink); showToast('Link copied!', '🔗', 'var(--a)') }}>Copy</Btn>
         </div>
         <p className="text-[12px] leading-relaxed mb-4" style={{ color: 'var(--m)' }}>
-          Share this via WhatsApp, email, or text. Recipients enter their own name and email and land straight in the availability picker.
+          Share via WhatsApp, email, or text. Recipients enter their own name and email and land straight in the availability picker.
         </p>
         <div className="border-t border-border pt-4">
           <p className="text-[11px] font-semibold mb-1">Want to invite someone directly by email?</p>
-          <p className="text-[12px] leading-relaxed" style={{ color: 'var(--m)' }}>Use "+ Add Person" to enter their details — they'll get a personalised invite email with their unique link.</p>
+          <p className="text-[12px] leading-relaxed" style={{ color: 'var(--m)' }}>Use "+ Add" to enter their details and they'll get a personalised email with their unique link.</p>
         </div>
         <ModalActions><Btn variant="ghost" onClick={() => setShowShare(false)}>Done</Btn></ModalActions>
       </Modal>

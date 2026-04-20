@@ -57,7 +57,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 
   // General patch (title, description, etc.)
-  const allowed = ['title','description','colour','start_date','days_to_show','duration','nudge_after','time_slots']
+  const allowed = ['title','description','colour','start_date','days_to_show','duration','nudge_after','time_slots','hide_weekends']
   const update = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)))
   const { error } = await supabaseAdmin.from('ww_events').update(update).eq('id', params.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

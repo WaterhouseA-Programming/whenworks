@@ -99,11 +99,13 @@ export function AvailPicker({
   daysToShow,
   initial = {},
   onChange,
+  hideWeekends = false,
 }: {
   startDate: string
   daysToShow: number
   initial?: Record<string, AvailStatus>
   onChange?: (avail: Record<string, AvailStatus>) => void
+  hideWeekends?: boolean
 }) {
   const [avail, setAvail] = useState<Record<string, AvailStatus>>(initial)
   const drag = useRef<AvailStatus | 'clr' | null>(null)
@@ -133,14 +135,16 @@ export function AvailPicker({
   }
 
   const setAll = (v: AvailStatus | null) => {
-    const dates = getDates(startDate, daysToShow)
+    const all = getDates(startDate, daysToShow)
+    const pool = hideWeekends ? all.filter(d => !isWeekend(d)) : all
     const next: Record<string, AvailStatus> = {}
-    if (v !== null) dates.forEach(d => { next[d] = v })
+    if (v !== null) pool.forEach(d => { next[d] = v })
     setAvail(next)
     onChange?.(next)
   }
 
-  const dates = getDates(startDate, daysToShow)
+  const all = getDates(startDate, daysToShow)
+  const dates = hideWeekends ? all.filter(d => !isWeekend(d)) : all
   const CHUNK = 14
   const chunks: string[][] = []
   for (let i = 0; i < dates.length; i += CHUNK) chunks.push(dates.slice(i, i + CHUNK))

@@ -14,6 +14,7 @@ export interface DBEvent {
   duration: number
   nudge_after: number
   time_slots: string[]
+  hide_weekends: boolean
   status: EventStatus
   decided_date: string | null
   decided_note: string | null

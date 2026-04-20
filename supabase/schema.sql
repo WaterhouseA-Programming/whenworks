@@ -18,6 +18,7 @@ create table ww_events (
   duration      integer not null default 1,
   nudge_after   integer not null default 2,  -- days, 0 = disabled
   time_slots    text[] not null default '{"allday"}',
+  hide_weekends boolean not null default false,
   status        text not null default 'open' check (status in ('open','decided')),
   decided_date  date,
   decided_note  text,

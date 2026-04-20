@@ -154,6 +154,7 @@ export default function AttendPage() {
           daysToShow={ev.days_to_show}
           initial={avail}
           onChange={setAvail}
+          hideWeekends={ev.hide_weekends ?? false}
         />
 
         <div className="flex justify-end mt-4">

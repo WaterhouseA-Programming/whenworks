@@ -51,9 +51,11 @@ export function bestDates(
   attendees: AttendeeWithAvail[],
   startDate: string,
   daysToShow: number,
-  duration: number
+  duration: number,
+  hideWeekends = false,
 ): DateScore[] | RunScore[] {
-  const dates = getDates(startDate, daysToShow)
+  const all = getDates(startDate, daysToShow)
+  const dates = hideWeekends ? all.filter(d => !isWeekend(d)) : all
 
   if (duration === 1) {
     return dates
