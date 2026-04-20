@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { Btn, Card, Label, Field, Textarea, Modal, ModalActions, Toast, Avatar } from '@/components/ui'
+import { Btn, Card, Label, Field, Textarea, Modal, ModalActions, Toast, Avatar, CalendarSourceButtons } from '@/components/ui'
 import { AvailPicker } from '@/components/AvailGrid'
 import { fmtDate, fmtLong, parseICS, getDates } from '@/lib/utils'
 import type { EventFull, AttendeeWithAvail, AvailStatus } from '@/types'
@@ -183,14 +183,10 @@ export default function AttendPage() {
       </Card>
 
       {/* ICS Import Modal */}
-      <Modal open={showICS} onClose={() => setShowICS(false)} title="📥 Import Calendar" subtitle="Export your calendar as an .ics file and paste the contents below to auto-mark your busy dates.">
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {['🍎 iPhone: Calendar → tap calendar name → Export Calendar', '🤖 Google: calendar.google.com → Settings → Export', '📆 Outlook: File → Open & Export → Export to iCalendar'].map(s => (
-            <div key={s} className="px-2.5 py-1.5 bg-surface3 border border-border rounded-[7px] text-[11px] text-[var(--t2)]">{s}</div>
-          ))}
-        </div>
+      <Modal open={showICS} onClose={() => setShowICS(false)} title="📥 Import Calendar" subtitle="Open your calendar app, export as .ics, then paste the file contents below.">
+        <CalendarSourceButtons />
         <Field label="Paste .ics file contents">
-          <Textarea rows={6} placeholder={'BEGIN:VCALENDAR\nVERSION:2.0\n...'} value={icsText} onChange={e => setIcsText(e.target.value)} />
+          <Textarea rows={5} placeholder={'BEGIN:VCALENDAR\nVERSION:2.0\n...'} value={icsText} onChange={e => setIcsText(e.target.value)} />
         </Field>
         <ModalActions>
           <Btn variant="ghost" onClick={() => setShowICS(false)}>Cancel</Btn>

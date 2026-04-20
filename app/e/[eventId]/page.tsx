@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import {
   Btn, Card, Chip, Label, Modal, ModalActions, Field, Input, Textarea, Select,
-  Toast, Avatar, Tabs, Badge, ProgressDots, NotifItem, getColour,
+  Toast, Avatar, Tabs, Badge, ProgressDots, NotifItem, getColour, CalendarSourceButtons,
 } from '@/components/ui'
 import { OverviewGrid, AvailPicker } from '@/components/AvailGrid'
 import { bestDates, fmtDate, fmtLong, daysSince, makeICS, parseICS, getDates } from '@/lib/utils'
@@ -421,11 +421,11 @@ export default function EventPage() {
             <Label>Scheduling</Label>
 
             {/* Weekends toggle */}
-            <div className="flex items-center justify-between py-3 border-b border-border">
-              <div>
+            <div className="flex items-center justify-between gap-4 py-3 border-b border-border">
+              <div className="flex-1 min-w-0">
                 <div className="text-[13px] font-semibold">Include weekends</div>
                 <div className="text-[11px] mt-0.5" style={{ color: 'var(--m)' }}>
-                  When off, Sat &amp; Sun are hidden from the grid and excluded from best-date scoring
+                  When off, Sat &amp; Sun are hidden from the grid and excluded from scoring
                 </div>
               </div>
               <button
@@ -433,68 +433,62 @@ export default function EventPage() {
                 className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 border-none cursor-pointer ${!settings.hide_weekends ? 'bg-accent' : 'bg-surface3'}`}
                 style={{ outline: 'none' }}
               >
-                <span
-                  className="absolute top-[3px] w-[18px] h-[18px] bg-white rounded-full shadow transition-transform"
-                  style={{ left: !settings.hide_weekends ? 'calc(100% - 21px)' : '3px' }}
-                />
+                <span className="absolute top-[3px] w-[18px] h-[18px] bg-white rounded-full shadow transition-transform"
+                  style={{ left: !settings.hide_weekends ? 'calc(100% - 21px)' : '3px' }} />
               </button>
             </div>
 
             {/* Duration */}
-            <div className="flex items-center justify-between py-3 border-b border-border">
-              <div>
+            <div className="flex items-start justify-between gap-4 py-3 border-b border-border flex-wrap">
+              <div className="flex-1 min-w-0">
                 <div className="text-[13px] font-semibold">Duration needed</div>
                 <div className="text-[11px] mt-0.5" style={{ color: 'var(--m)' }}>How many consecutive days are required</div>
               </div>
-              <Select
-                value={settings.duration}
-                onChange={e => setSettings(p => ({ ...p, duration: parseInt(e.target.value) }))}
-                className="w-40"
-              >
-                {[1,2,3,4,5].map(n => <option key={n} value={n}>{n} {n === 1 ? 'day' : 'consecutive days'}</option>)}
+              <Select value={settings.duration} onChange={e => setSettings(p => ({ ...p, duration: parseInt(e.target.value) }))}>
+                {[1,2,3,4,5].map(n => <option key={n} value={n}>{n} {n === 1 ? 'day' : 'days'}</option>)}
               </Select>
             </div>
 
-            {/* Date window */}
-            <div className="flex items-center justify-between py-3 border-b border-border gap-4">
-              <div className="flex-shrink-0">
-                <div className="text-[13px] font-semibold">Date window</div>
-                <div className="text-[11px] mt-0.5" style={{ color: 'var(--m)' }}>Start date and how many days to show</div>
-              </div>
-              <div className="flex gap-2 flex-shrink-0">
-                <Input type="date" value={settings.start_date} onChange={e => setSettings(p => ({ ...p, start_date: e.target.value }))} className="w-36" />
-                <Select value={settings.days_to_show} onChange={e => setSettings(p => ({ ...p, days_to_show: parseInt(e.target.value) }))} className="w-28">
+            {/* Date window — label above inputs so they don't crowd on small screens */}
+            <div className="py-3 border-b border-border">
+              <div className="text-[13px] font-semibold mb-0.5">Date window</div>
+              <div className="text-[11px] mb-2.5" style={{ color: 'var(--m)' }}>Start date and how many days to show</div>
+              <div className="flex gap-2 flex-wrap">
+                <Input type="date" value={settings.start_date} onChange={e => setSettings(p => ({ ...p, start_date: e.target.value }))} />
+                <Select value={settings.days_to_show} onChange={e => setSettings(p => ({ ...p, days_to_show: parseInt(e.target.value) }))}>
                   {[7,10,14,21,28].map(n => <option key={n} value={n}>{n} days</option>)}
                 </Select>
               </div>
             </div>
 
             {/* Auto-nudge */}
-            <div className="flex items-center justify-between py-3 border-b border-border">
-              <div>
+            <div className="flex items-start justify-between gap-4 py-3 border-b border-border flex-wrap">
+              <div className="flex-1 min-w-0">
                 <div className="text-[13px] font-semibold">Auto-nudge after</div>
                 <div className="text-[11px] mt-0.5" style={{ color: 'var(--m)' }}>Flag attendees who haven't filled in after this many days</div>
               </div>
-              <Select value={settings.nudge_after} onChange={e => setSettings(p => ({ ...p, nudge_after: parseInt(e.target.value) }))} className="w-32">
+              <Select value={settings.nudge_after} onChange={e => setSettings(p => ({ ...p, nudge_after: parseInt(e.target.value) }))}>
                 <option value="0">Never</option>
                 {[1,2,3,5,7].map(n => <option key={n} value={n}>{n} day{n > 1 ? 's' : ''}</option>)}
               </Select>
             </div>
 
-            {/* Time of day */}
-            <div className="py-3">
-              <div className="text-[13px] font-semibold mb-1">Time of day preference</div>
-              <div className="text-[11px] mb-2.5" style={{ color: 'var(--m)' }}>Let attendees know what time of day you're considering</div>
-              <div className="flex gap-1.5 flex-wrap">
-                {TIME_SLOTS.map(ts => (
-                  <button key={ts.key} onClick={() => toggleTS(ts.key)}
-                    className={`px-3 py-1.5 rounded-[5px] border text-[12px] font-semibold cursor-pointer transition-all font-sans ${settings.time_slots.includes(ts.key) ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-surface2 hover:border-border2'}`}
-                    style={settings.time_slots.includes(ts.key) ? {} : { color: 'var(--t)' }}>
-                    {ts.label}
-                  </button>
-                ))}
+            {/* Time of day — only relevant for single-day events */}
+            {settings.duration === 1 && (
+              <div className="py-3">
+                <div className="text-[13px] font-semibold mb-0.5">Time of day preference</div>
+                <div className="text-[11px] mb-2.5" style={{ color: 'var(--m)' }}>Let attendees know what part of the day you have in mind</div>
+                <div className="flex gap-1.5 flex-wrap">
+                  {TIME_SLOTS.map(ts => (
+                    <button key={ts.key} onClick={() => toggleTS(ts.key)}
+                      className={`px-3 py-1.5 rounded-[5px] border text-[12px] font-semibold cursor-pointer transition-all font-sans ${settings.time_slots.includes(ts.key) ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-surface2 hover:border-border2'}`}
+                      style={settings.time_slots.includes(ts.key) ? {} : { color: 'var(--t)' }}>
+                      {ts.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </Card>
 
           <div className="flex justify-end">
@@ -554,14 +548,10 @@ export default function EventPage() {
       </Modal>
 
       {/* ── ICS Import Modal ── */}
-      <Modal open={showICS} onClose={() => setShowICS(false)} title="📥 Import Calendar" subtitle="Export your calendar as an .ics file and paste the contents below to auto-mark your busy dates.">
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {['🍎 iPhone: Calendar → tap calendar → Export Calendar', '🤖 Google: calendar.google.com → Settings → Export', '📆 Outlook: File → Open & Export → Export to iCalendar'].map(s => (
-            <div key={s} className="px-2.5 py-1.5 bg-surface3 border border-border rounded-[7px] text-[11px]" style={{ color: 'var(--t2)' }}>{s}</div>
-          ))}
-        </div>
-        <Field label="Paste .ics contents">
-          <Textarea rows={6} placeholder={'BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\n...'} value={icsText} onChange={e => setIcsText(e.target.value)} />
+      <Modal open={showICS} onClose={() => setShowICS(false)} title="📥 Import Calendar" subtitle="Open your calendar app, export as .ics, then paste the file contents below.">
+        <CalendarSourceButtons />
+        <Field label="Paste .ics file contents">
+          <Textarea rows={5} placeholder={'BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\n...'} value={icsText} onChange={e => setIcsText(e.target.value)} />
         </Field>
         <ModalActions>
           <Btn variant="ghost" onClick={() => setShowICS(false)}>Cancel</Btn>

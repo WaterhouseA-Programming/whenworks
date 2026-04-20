@@ -206,16 +206,18 @@ export default function Home() {
             </Select>
           </Field>
         </div>
-        <Field label="Time of Day">
-          <div className="flex gap-1.5 flex-wrap mt-0.5">
-            {TIME_SLOTS.map(ts => (
-              <button key={ts.key} onClick={() => toggleTS(ts.key)}
-                className={`px-3 py-1.5 rounded-[5px] border text-[12px] font-semibold cursor-pointer transition-all font-sans ${form.timeSlots.includes(ts.key) ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-surface2 text-muted hover:border-border2 hover:text-[var(--t)]'}`}>
-                {ts.label}
-              </button>
-            ))}
-          </div>
-        </Field>
+        {parseInt(form.duration) === 1 && (
+          <Field label="Time of Day">
+            <div className="flex gap-1.5 flex-wrap mt-0.5">
+              {TIME_SLOTS.map(ts => (
+                <button key={ts.key} onClick={() => toggleTS(ts.key)}
+                  className={`px-3 py-1.5 rounded-[5px] border text-[12px] font-semibold cursor-pointer transition-all font-sans ${form.timeSlots.includes(ts.key) ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-surface2 text-muted hover:border-border2 hover:text-[var(--t)]'}`}>
+                  {ts.label}
+                </button>
+              ))}
+            </div>
+          </Field>
+        )}
         <Field label="Accent Colour">
           <div className="flex gap-2 flex-wrap mt-1">
             {COLOURS.map(c => (

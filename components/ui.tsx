@@ -213,6 +213,37 @@ export function ProgressDots({ attendees }: { attendees: Array<{ name: string; a
   )
 }
 
+// ── Calendar source buttons ───────────────────────────────────────────────────
+const CAL_SOURCES = [
+  { icon: '📱', name: 'iPhone / iPad', hint: 'Open Calendar app → Calendars → ⓘ next to calendar → Scroll to Export', href: 'calshow://' },
+  { icon: '🍎', name: 'Mac Calendar', hint: 'File → Export → Export…', href: null },
+  { icon: '🗓️', name: 'Google Calendar', hint: 'Settings (⚙) → Import & Export → Export', href: 'https://calendar.google.com/calendar/r/settings/export' },
+  { icon: '📧', name: 'Outlook.com', hint: 'Settings (⚙) → View all Outlook settings → Export calendar', href: 'https://outlook.live.com/calendar/0/options/calendar/ConnectedCalendars' },
+  { icon: '💼', name: 'Outlook Desktop', hint: 'File → Open & Export → Import/Export → Export to a file', href: null },
+]
+
+export function CalendarSourceButtons() {
+  return (
+    <div className="grid grid-cols-1 gap-1.5 mb-4">
+      {CAL_SOURCES.map(s => {
+        const inner = (
+          <div className={`flex items-center gap-3 px-3 py-2.5 bg-surface2 border border-border rounded-[7px] transition-colors ${s.href ? 'hover:border-border2 hover:bg-surface3' : 'opacity-70'}`}>
+            <span className="text-[17px] flex-shrink-0">{s.icon}</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] font-semibold">{s.name}</div>
+              <div className="text-[11px] leading-relaxed" style={{ color: 'var(--m)' }}>{s.hint}</div>
+            </div>
+            {s.href && <span className="text-[11px] text-accent font-semibold flex-shrink-0 ml-1">Open →</span>}
+          </div>
+        )
+        return s.href
+          ? <a key={s.name} href={s.href} target="_blank" rel="noopener noreferrer" className="block no-underline">{inner}</a>
+          : <div key={s.name}>{inner}</div>
+      })}
+    </div>
+  )
+}
+
 // ── Notification item ─────────────────────────────────────────────────────────
 const notifIcon: Record<string, string> = { all_filled: '🎉', nudge_sent: '📨', auto_nudge: '⚡', decided: '✅', info: 'ℹ️' }
 
