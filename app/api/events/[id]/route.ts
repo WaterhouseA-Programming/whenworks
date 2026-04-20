@@ -47,7 +47,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       const icsContent = makeICS(ev.title, decided_date, decided_note || '')
       const dateStr = fmtDate(decided_date)
       await Promise.allSettled(
-        ev.attendees.map(a =>
+        ev.attendees.map((a: any) =>
           sendDecidedEmail({ toName: a.name, toEmail: a.email, eventTitle: ev.title, organiserName: ev.organiser_name, decidedDate: dateStr, decidedNote: decided_note || '', icsContent })
         )
       )
