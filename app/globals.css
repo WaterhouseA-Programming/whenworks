@@ -3,21 +3,35 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Light mode (default) ─────────────────────────────────────────────────── */
 :root {
-  --bg: #0c0c0f;
-  --s1: #131317;
-  --s2: #1a1a20;
-  --s3: #222229;
-  --b:  #2a2a35;
-  --b2: #363644;
-  --t:  #eeeef5;
-  --t2: #b0b0c0;
-  --m:  #72728a;
-  --a:  #5b8ef0;
-  --a2: #c084fc;
-  --g:  #34d88a;
-  --am: #f59e0b;
-  --r:  #f05b5b;
+  --bg:  #ffffff;
+  --s1:  #f7f8fa;
+  --s2:  #eef0f4;
+  --s3:  #e4e6eb;
+  --b:   #dde1e9;
+  --b2:  #c9cdd8;
+  --t:   #111118;
+  --t2:  #4a4a62;
+  --m:   #8888a0;
+  --a:   #5b8ef0;
+  --a2:  #c084fc;
+  --g:   #34d88a;
+  --am:  #f59e0b;
+  --r:   #f05b5b;
+}
+
+/* ── Dark mode ────────────────────────────────────────────────────────────── */
+.dark {
+  --bg:  #0c0c0f;
+  --s1:  #131317;
+  --s2:  #1a1a20;
+  --s3:  #222229;
+  --b:   #2a2a35;
+  --b2:  #363644;
+  --t:   #eeeef5;
+  --t2:  #b0b0c0;
+  --m:   #72728a;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -48,9 +62,9 @@ body {
   user-select: none;
 }
 .ac:hover { border-color: var(--a); transform: scale(1.08); }
-.ac.free  { background: rgba(52,216,138,.14); border-color: rgba(52,216,138,.38); color: var(--g); }
-.ac.busy  { background: rgba(240,91,91,.10);  border-color: rgba(240,91,91,.28);  color: var(--r); }
-.ac.maybe { background: rgba(245,158,11,.10); border-color: rgba(245,158,11,.30); color: var(--am); }
+.ac.free  { background: rgba(52,216,138,.14); border-color: rgba(52,216,138,.38); color: #1a9e5e; }
+.ac.busy  { background: rgba(240,91,91,.10);  border-color: rgba(240,91,91,.28);  color: #c93535; }
+.ac.maybe { background: rgba(245,158,11,.10); border-color: rgba(245,158,11,.30); color: #b97300; }
 .ac.sf    { background: rgba(52,216,138,.22); border-color: rgba(52,216,138,.55); }
 .ac.sp    { background: rgba(245,158,11,.13); border-color: rgba(245,158,11,.32); }
 .ac.sn    { background: rgba(240,91,91,.07);  border-color: rgba(240,91,91,.14);  }

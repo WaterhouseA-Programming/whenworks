@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import {
   Btn, Card, Chip, Label, Modal, ModalActions, Field, Input, Textarea, Select,
   Toast, Avatar, Tabs, Badge, ProgressDots, NotifItem, getColour, getInitials,
@@ -14,9 +14,10 @@ const TIME_SLOT_LABELS: Record<string, string> = { morning: '🌅 Morning', afte
 
 export default function EventPage() {
   const { eventId } = useParams<{ eventId: string }>()
+  const searchParams = useSearchParams()
   const [ev, setEv] = useState<EventFull | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useState(searchParams.get('tab') || 'overview')
   const [activeAttId, setActiveAttId] = useState<string | null>(null)
   const [filterWeekends, setFilterWeekends] = useState(false)
   const [toast, setToast] = useState<{ msg: string; icon: string; colour?: string } | null>(null)
@@ -61,12 +62,12 @@ export default function EventPage() {
   }, [activeAttId, ev])
 
   if (loading) return (
-    <div className="max-w-[960px] mx-auto px-4 py-20 text-center text-muted text-[13px]">Loading…</div>
+    <div className="max-w-[960px] mx-auto px-4 py-20 text-center text-[13px]" style={{ color: 'var(--m)' }}>Loading…</div>
   )
   if (!ev) return (
     <div className="max-w-[960px] mx-auto px-4 py-20 text-center">
       <h2 className="text-[20px] font-bold mb-2">Event not found</h2>
-      <p className="text-muted text-[13px] mb-5">This event may have been deleted.</p>
+      <p className="text-[13px] mb-5" style={{ color: 'var(--m)' }}>This event may have been deleted.</p>
       <Btn variant="secondary" onClick={() => window.location.href = '/'}>← Back to events</Btn>
     </div>
   )
@@ -75,6 +76,7 @@ export default function EventPage() {
   const unread = ev.notifications.filter(n => !n.read).length
   const filled = ev.attendees.filter(a => Object.keys(a.availability).length > 0).length
   const isMulti = ev.duration > 1
+  const joinLink = `${APP_URL}/join/${ev.id}`
 
   // Mark notifications read when opening alerts tab
   const switchTab = async (t: string) => {
@@ -184,11 +186,11 @@ export default function EventPage() {
       <nav className="flex items-center justify-between py-4 border-b border-border mb-7 sticky top-0 bg-bg z-10">
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => window.location.href = '/'}>
           <div className="w-7 h-7 rounded-lg flex items-center justify-center text-sm" style={{ background: 'linear-gradient(135deg,#5b8ef0,#c084fc)' }}>📅</div>
-          <span className="font-bold text-[18px] tracking-[-0.3px]">WhenWorks<span className="text-muted font-normal">.</span></span>
+          <span className="font-bold text-[18px] tracking-[-0.3px]">WhenWorks<span style={{ color: 'var(--m)' }} className="font-normal">.</span></span>
         </div>
         <div className="flex gap-2">
-          <Btn variant="secondary" size="sm" onClick={() => setShowAdd(true)}>+ Invite</Btn>
-          <Btn variant="secondary" size="sm" onClick={() => setShowShare(true)}>🔗 Share</Btn>
+          <Btn variant="primary" size="sm" onClick={() => setShowShare(true)}>🔗 Share Link</Btn>
+          <Btn variant="secondary" size="sm" onClick={() => setShowAdd(true)}>+ Add</Btn>
         </div>
       </nav>
 
@@ -201,7 +203,7 @@ export default function EventPage() {
             <h1 className="font-bold text-[clamp(15px,3.5vw,22px)]">{ev.title}</h1>
             {ev.status === 'decided' && <Chip colour="green">✓ Decided</Chip>}
           </div>
-          <div className="text-muted text-[12px] mt-1">
+          <div className="text-[12px] mt-1" style={{ color: 'var(--m)' }}>
             By {ev.organiser_name} · {fmtDate(ev.start_date)} · {ev.days_to_show}d window
             {ev.duration > 1 && ` · ${ev.duration} consecutive days`}
           </div>
@@ -215,13 +217,30 @@ export default function EventPage() {
       {/* ── Overview Tab ── */}
       {tab === 'overview' && (
         <>
+          {/* What the organiser set up */}
+          <Card>
+            <Label>What we're looking for</Label>
+            <p className="text-[15px] font-bold mb-1">
+              {ev.duration === 1 ? 'A single day' : `${ev.duration} consecutive days`}
+            </p>
+            <p className="text-[13px]" style={{ color: 'var(--t2)' }}>
+              From {fmtDate(ev.start_date)}, across a {ev.days_to_show}-day window
+              {ev.time_slots?.length > 0 && (
+                <span> · {ev.time_slots.map((s: string) => TIME_SLOT_LABELS[s] || s).join(', ')}</span>
+              )}
+            </p>
+            {ev.description && (
+              <p className="text-[12px] mt-2 leading-relaxed" style={{ color: 'var(--t2)' }}>{ev.description}</p>
+            )}
+          </Card>
+
           {/* Decided banner */}
           {ev.status === 'decided' && ev.decided_date && (
             <div className="bg-green/[0.08] border border-green/25 rounded-[10px] p-4 mb-3.5 flex items-center gap-3.5">
               <span className="text-[24px] flex-shrink-0">✅</span>
               <div className="flex-1">
                 <h3 className="text-[15px] font-bold text-green mb-0.5">Date confirmed: {fmtLong(ev.decided_date)}</h3>
-                {ev.decided_note && <p className="text-[12px] text-[var(--t2)]">{ev.decided_note}</p>}
+                {ev.decided_note && <p className="text-[12px]" style={{ color: 'var(--t2)' }}>{ev.decided_note}</p>}
                 <div className="mt-2">
                   <Btn variant="green" size="xs" onClick={downloadICS}>📥 Add to Calendar (.ics)</Btn>
                 </div>
@@ -257,17 +276,12 @@ export default function EventPage() {
               <Label>Availability Overview</Label>
               <button
                 onClick={() => setFilterWeekends(v => !v)}
-                className={`text-[11px] px-2.5 py-1 rounded-[5px] border font-semibold cursor-pointer transition-all font-sans ${filterWeekends ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-surface2 text-muted hover:border-border2 hover:text-[var(--t)]'}`}
+                className={`text-[11px] px-2.5 py-1 rounded-[5px] border font-semibold cursor-pointer transition-all font-sans ${filterWeekends ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-surface2 hover:border-border2'}`}
+                style={filterWeekends ? {} : { color: 'var(--t)' }}
               >
                 {filterWeekends ? '✓ ' : ''}Hide Weekends
               </button>
             </div>
-            {ev.description && (
-              <div className="text-[12px] text-muted bg-surface2 rounded-[6px] px-3 py-2 mb-3.5 leading-relaxed">{ev.description}</div>
-            )}
-            {ev.time_slots?.length > 0 && (
-              <div className="text-[12px] text-muted mb-3">⏰ {ev.time_slots.map(s => TIME_SLOT_LABELS[s] || s).join(' · ')}</div>
-            )}
             <OverviewGrid attendees={ev.attendees} startDate={ev.start_date} daysToShow={ev.days_to_show} hideWeekends={filterWeekends} />
           </Card>
 
@@ -275,7 +289,7 @@ export default function EventPage() {
             <Label>Completion</Label>
             <div className="flex items-center gap-2.5 flex-wrap">
               <ProgressDots attendees={ev.attendees} />
-              <span className="text-[12px] text-muted">{filled}/{ev.attendees.length} filled in</span>
+              <span className="text-[12px]" style={{ color: 'var(--m)' }}>{filled}/{ev.attendees.length} filled in</span>
             </div>
           </Card>
         </>
@@ -289,8 +303,8 @@ export default function EventPage() {
             <div className="flex gap-1.5 flex-wrap">
               {ev.attendees.map(a => (
                 <button key={a.id} onClick={() => setActiveAttId(a.id)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[7px] text-[12px] font-semibold cursor-pointer border transition-all font-sans ${activeAttId === a.id ? 'text-white border-transparent' : 'bg-surface2 border-border text-muted hover:border-border2 hover:text-[var(--t)]'}`}
-                  style={activeAttId === a.id ? { background: getColour(a.name) } : {}}>
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[7px] text-[12px] font-semibold cursor-pointer border transition-all font-sans ${activeAttId === a.id ? 'text-white border-transparent' : 'bg-surface2 border-border hover:border-border2'}`}
+                  style={activeAttId === a.id ? { background: getColour(a.name) } : { color: 'var(--m)' }}>
                   <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: activeAttId === a.id ? 'rgba(255,255,255,0.7)' : getColour(a.name) }} />
                   {a.name}
                 </button>
@@ -302,9 +316,9 @@ export default function EventPage() {
             <div className="flex justify-between items-start mb-3 flex-wrap gap-2">
               <div>
                 <Label>Your Availability</Label>
-                <div className="text-[11px] text-muted">Tap: Free → Maybe → Busy → Clear &nbsp;·&nbsp; Or drag across multiple days</div>
+                <div className="text-[11px]" style={{ color: 'var(--m)' }}>Tap: Free → Maybe → Busy → Clear &nbsp;·&nbsp; Or drag across multiple days</div>
                 {ev.time_slots?.length > 0 && (
-                  <div className="text-[11px] text-muted mt-0.5">Time slots: {ev.time_slots.map(s => TIME_SLOT_LABELS[s] || s).join(', ')}</div>
+                  <div className="text-[11px] mt-0.5" style={{ color: 'var(--m)' }}>Time slots: {ev.time_slots.map((s: string) => TIME_SLOT_LABELS[s] || s).join(', ')}</div>
                 )}
               </div>
               <Btn variant="secondary" size="xs" onClick={() => setShowICS(true)}>📥 Import Calendar</Btn>
@@ -336,7 +350,7 @@ export default function EventPage() {
                 <div className="font-bold text-[14px] text-green">
                   Best date{isMulti ? ' run' : ''} so far: {isMulti ? `${fmtDate(best[0].startDate)} – ${fmtDate(best[0].endDate)}` : fmtDate(best[0].date)}
                 </div>
-                <div className="text-[12px] text-[var(--t2)] mt-0.5">{best[0].free}/{best[0].total} respondents free{isMulti ? ' each day' : ''}</div>
+                <div className="text-[12px] mt-0.5" style={{ color: 'var(--t2)' }}>{best[0].free}/{best[0].total} respondents free{isMulti ? ' each day' : ''}</div>
               </div>
               {ev.status !== 'decided' && (
                 <Btn variant="green" size="sm" onClick={() => { setFinalDate(best[0]?.date || best[0]?.startDate || ''); setShowFinalise(true) }}>Finalise</Btn>
@@ -345,9 +359,12 @@ export default function EventPage() {
           )}
 
           <Card>
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
               <Label>Attendees ({ev.attendees.length})</Label>
-              <Btn variant="secondary" size="sm" onClick={() => setShowAdd(true)}>+ Add Person</Btn>
+              <div className="flex gap-2">
+                <Btn variant="primary" size="sm" onClick={() => setShowShare(true)}>🔗 Share Link</Btn>
+                <Btn variant="secondary" size="sm" onClick={() => setShowAdd(true)}>+ Add Person</Btn>
+              </div>
             </div>
 
             {ev.attendees.map(a => {
@@ -363,7 +380,7 @@ export default function EventPage() {
                       {a.name}
                       {a.is_organiser && <span className="text-[10px] text-accent font-medium">organiser</span>}
                     </div>
-                    <div className="text-[11px] text-muted">{a.email} · Joined {jd === 0 ? 'today' : `${jd}d ago`}</div>
+                    <div className="text-[11px]" style={{ color: 'var(--m)' }}>{a.email} · Joined {jd === 0 ? 'today' : `${jd}d ago`}</div>
                   </div>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {hasFilled
@@ -382,7 +399,7 @@ export default function EventPage() {
             })}
 
             {ev.nudge_after > 0 && (
-              <div className="text-[11px] text-muted mt-3 px-3 py-2 bg-surface2 rounded-[6px] border border-border">
+              <div className="text-[11px] mt-3 px-3 py-2 bg-surface2 rounded-[6px] border border-border" style={{ color: 'var(--m)' }}>
                 ⚡ Auto-nudge: attendees who haven't filled in after {ev.nudge_after} day{ev.nudge_after > 1 ? 's' : ''} are flagged automatically.
               </div>
             )}
@@ -396,7 +413,7 @@ export default function EventPage() {
           ? <div className="text-center py-16">
               <div className="text-[36px] mb-3">🔔</div>
               <h3 className="font-bold text-[17px] mb-1.5">No notifications yet</h3>
-              <p className="text-muted text-[13px] max-w-[280px] mx-auto leading-relaxed">You'll be notified when everyone fills in, when nudges are sent, or when a date is confirmed.</p>
+              <p className="text-[13px] max-w-[280px] mx-auto leading-relaxed" style={{ color: 'var(--m)' }}>You'll be notified when everyone fills in, when nudges are sent, or when a date is confirmed.</p>
             </div>
           : <div>{ev.notifications.map(n => <NotifItem key={n.id} notif={n} />)}</div>
       )}
@@ -424,7 +441,7 @@ export default function EventPage() {
               <input type="radio" name="fd" readOnly checked={finalDate === dateVal} />
               <div className="flex-1">
                 <div className="text-[13px] font-semibold">{lbl}</div>
-                <div className="text-[11px] text-muted">{b.free}/{b.total} free{isMulti ? ' each day' : ''}</div>
+                <div className="text-[11px]" style={{ color: 'var(--m)' }}>{b.free}/{b.total} free{isMulti ? ' each day' : ''}</div>
               </div>
               {i === 0 && <span className="text-[11px] text-green font-semibold">Best</span>}
             </div>
@@ -442,7 +459,7 @@ export default function EventPage() {
       <Modal open={showICS} onClose={() => setShowICS(false)} title="📥 Import Calendar" subtitle="Export your calendar as an .ics file and paste the contents below to auto-mark your busy dates.">
         <div className="flex flex-wrap gap-1.5 mb-3">
           {['🍎 iPhone: Calendar → tap calendar → Export Calendar', '🤖 Google: calendar.google.com → Settings → Export', '📆 Outlook: File → Open & Export → Export to iCalendar'].map(s => (
-            <div key={s} className="px-2.5 py-1.5 bg-surface3 border border-border rounded-[7px] text-[11px] text-[var(--t2)]">{s}</div>
+            <div key={s} className="px-2.5 py-1.5 bg-surface3 border border-border rounded-[7px] text-[11px]" style={{ color: 'var(--t2)' }}>{s}</div>
           ))}
         </div>
         <Field label="Paste .ics contents">
@@ -455,17 +472,22 @@ export default function EventPage() {
       </Modal>
 
       {/* ── Share Modal ── */}
-      <Modal open={showShare} onClose={() => setShowShare(false)} title="Share Event" subtitle="Send this link to attendees. Each person gets a unique personalised link via email when added.">
-        <div className="bg-surface2 border border-border rounded-[7px] px-3 py-2.5 flex items-center gap-2.5 mt-1">
-          <code className="flex-1 text-[12px] text-muted overflow-hidden text-ellipsis whitespace-nowrap">
-            {APP_URL}/e/{ev.id}
+      <Modal open={showShare} onClose={() => setShowShare(false)} title="🔗 Share Invite Link" subtitle="Anyone with this link can enter their details and add their availability — no email invite needed.">
+        <Label>Invite link</Label>
+        <div className="bg-surface2 border border-border rounded-[7px] px-3 py-2.5 flex items-center gap-2.5 mb-3">
+          <code className="flex-1 text-[12px] overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: 'var(--t2)' }}>
+            {joinLink}
           </code>
-          <Btn variant="secondary" size="xs" onClick={() => { navigator.clipboard?.writeText(`${APP_URL}/e/${ev.id}`); showToast('Link copied!', '🔗', 'var(--a)') }}>Copy</Btn>
+          <Btn variant="primary" size="xs" onClick={() => { navigator.clipboard?.writeText(joinLink); showToast('Link copied!', '🔗', 'var(--a)') }}>Copy</Btn>
         </div>
-        <p className="text-[12px] text-muted mt-3 leading-relaxed">
-          Attendees added via "+ Invite" receive a personal link by email — their link auto-selects their name in the availability view.
+        <p className="text-[12px] leading-relaxed mb-4" style={{ color: 'var(--m)' }}>
+          Share this via WhatsApp, email, or text. Recipients enter their own name and email and land straight in the availability picker.
         </p>
-        <ModalActions><Btn variant="ghost" onClick={() => setShowShare(false)}>Close</Btn></ModalActions>
+        <div className="border-t border-border pt-4">
+          <p className="text-[11px] font-semibold mb-1">Want to invite someone directly by email?</p>
+          <p className="text-[12px] leading-relaxed" style={{ color: 'var(--m)' }}>Use "+ Add Person" to enter their details — they'll get a personalised invite email with their unique link.</p>
+        </div>
+        <ModalActions><Btn variant="ghost" onClick={() => setShowShare(false)}>Done</Btn></ModalActions>
       </Modal>
 
       {/* ── Delete Modal ── */}

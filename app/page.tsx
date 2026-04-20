@@ -72,7 +72,7 @@ export default function Home() {
         setShowCreate(false)
         setForm({ title:'', description:'', name:'', email:'', startDate:todayStr(), days:'14', duration:'1', nudgeAfter:'2', timeSlots:['allday'], colour:'#5b8ef0' })
         showToast('Event created!', '🎉', 'var(--g)')
-        window.location.href = `/e/${ev.id}`
+        window.location.href = `/e/${ev.id}?tab=attendees`
       } else {
         showToast('Failed to create event', '✗', 'var(--r)')
       }
@@ -85,7 +85,7 @@ export default function Home() {
       <nav className="flex items-center justify-between py-4 border-b border-border mb-7 sticky top-0 bg-bg z-10">
         <div className="flex items-center gap-2 cursor-pointer">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center text-sm" style={{ background: 'linear-gradient(135deg,#5b8ef0,#c084fc)' }}>📅</div>
-          <span className="font-bold text-[18px] tracking-[-0.3px]">WhenWorks<span className="text-muted font-normal">.</span></span>
+          <span className="font-bold text-[18px] tracking-[-0.3px]">WhenWorks<span style={{ color: 'var(--m)' }} className="font-normal">.</span></span>
         </div>
         <Btn variant="primary" size="sm" onClick={() => setShowCreate(true)}>+ New Event</Btn>
       </nav>
